@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "doomboard-mobile",
+    "slug": "doomboard-mobile",
+    "version": "1.0.0",
+    "scheme": "doomboard",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#09090b"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.doomboard.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#09090b"
+      },
+      "package": "com.doomboard.mobile",
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-share-intent",
+        {
+          "ios": {
+            "activationRules": {
+              "NSExtensionActivationRule": {
+                "NSExtensionActivationSupportsText": true,
+                "NSExtensionActivationSupportsWebURLWithMaxCount": 1
+              }
+            }
+          },
+          "android": {
+            "intentFilters": [
+              {
+                "action": "SEND",
+                "data": {
+                  "mimeType": "text/plain"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "build": {},
+        "projectId": "7d508c88-1286-493a-ad3b-957a1ecaae9c"
+      }
+    },
+    "owner": "adarshgzz"
+  }
+}
