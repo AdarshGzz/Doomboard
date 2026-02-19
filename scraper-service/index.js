@@ -6,9 +6,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Gemini
-// Initialize Gemini - Using 1.5 Flash for better free tier limits (RPM)
+// Initialize Gemini - Using 2.0 Flash Lite per user request
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
 // Initialize Supabase
 const supabase = createClient(
