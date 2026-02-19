@@ -32,7 +32,7 @@ export default function App() {
   };
 
   const openWebApp = () => {
-    Linking.openURL('https://doomboard.vercel.app'); // Update with real URL if needed
+    Linking.openURL('https://doomboard.vercel.app');
   };
 
   return (

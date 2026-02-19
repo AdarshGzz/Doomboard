@@ -10,33 +10,30 @@ Follow these steps to deploy your web app and scraper to Vercel.
 4. Add the following **Environment Variables**:
    - `VITE_SUPABASE_URL`: (Your Supabase URL)
    - `VITE_SUPABASE_ANON_KEY`: (Your Supabase Anon Key)
-5. Click **Deploy**.
+5. Click **Deploy**. (Your live URL is: `https://doomboard.vercel.app`)
 
 ## 2. Deploy the Scraper (`scraper-service`)
 
-1. Click **Add New** > **Project** again.
-2. Import the same repository but select `scraper-service` as the Root Directory.
-3. Add the following **Environment Variables**:
+Since the scraper needs to stay active and run Puppeteer, it's better to host it on a persistent platform like **Railway** or **Render** instead of Vercel.
+
+1. Go to [Railway](https://railway.app) or [Render](https://render.com).
+2. Create a new service and import your repository.
+3. Select the `scraper-service` directory.
+4. Add the following **Environment Variables**:
    - `SUPABASE_URL`: (Your Supabase URL)
-   - `SUPABASE_SERVICE_ROLE_KEY`: (Your Service Role Key - **IMPORTANT**: NOT the anon key)
+   - `SUPABASE_SERVICE_ROLE_KEY`: (Your Service Role Key)
    - `GEMINI_API_KEY`: (Your Gemini API Key)
-4. Click **Deploy**.
-5. Once deployed, copy your **Production URL** (e.g., `https://scraper-service.vercel.app`).
+5. Set the Start Command to: `npm start`.
+6. Click **Deploy**.
 
-## 3. Set up Supabase Webhook
+---
 
-To make the scraper run automatically when a new job is added:
+## 3. How it Works (No Webhooks Needed)
 
-1. Go to your [Supabase Dashboard](https://supabase.com/dashboard).
-2. Go to **Database** > **Webhooks**.
-3. Click **Create a new Hook**.
-4. **Name**: `TriggerScraper`
-5. **Table**: `jobs`
-6. **Events**: `INSERT`
-7. **Filter**: `status = 'collected'`
-8. **Method**: `POST`
-9. **URL**: `https://YOUR-SCRAPER-URL.vercel.app/api/scrape`
-10. Click **Create Webhook**.
+This scraper uses **Supabase Realtime**. 
+- It automatically listens for new jobs in your database.
+- It polls every 30 seconds as a backup.
+- **You do NOT need to set up any Webhooks in Supabase.**
 
 ---
 

@@ -1,11 +1,13 @@
 require('dotenv').config();
 const puppeteer = require('puppeteer');
+const express = require('express');
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 // Initialize Supabase
 const supabase = createClient(
@@ -194,6 +196,13 @@ async function scanForPendingJobs() {
 }
 
 async function startWorker() {
+    // Basic Health Check Server
+    const app = express();
+    const port = process.env.PORT || 3001;
+    app.get('/', (req, res) => res.send('DOOMBOARD Scraper Active'));
+    app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+    app.listen(port, () => console.log(`Health check server on port ${port}`));
+
     console.log('--- DOOMBOARD Scraper Worker Starting ---');
     console.log(`Monitoring Supabase: ${process.env.SUPABASE_URL}`);
     console.log('Mode: Hybrid (Realtime + 30s Polling Fallback)');
