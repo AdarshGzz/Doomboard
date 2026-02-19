@@ -23,8 +23,9 @@ Since the scraper needs to stay active and run Puppeteer, it's better to host it
    - `SUPABASE_URL`: (Your Supabase URL)
    - `SUPABASE_SERVICE_ROLE_KEY`: (Your Service Role Key)
    - `GEMINI_API_KEY`: (Your Gemini API Key)
-5. Set the Start Command to: `npm start`.
-6. Click **Deploy**.
+5. Set the **Build Command** to: `npm run build`.
+6. Set the **Start Command** to: `npm start`.
+7. Click **Deploy**.
 
 ---
 
