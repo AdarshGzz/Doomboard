@@ -1,14 +1,7 @@
 require('dotenv').config();
 const puppeteer = require('puppeteer');
 const express = require('express');
-
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
-
-// Initialize Gemini
-// Initialize Gemini - Using 2.0 Flash Lite per user request
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
 // Initialize Supabase
 const supabase = createClient(
@@ -103,7 +96,7 @@ async function scrapeUrlWithRetry(url, retries = 2) {
 }
 
 /**
- * AI Logic
+ * AI Logic via OpenRouter
  */
 async function refineWithAI(scrapedData, url) {
     const prompt = `
@@ -119,11 +112,37 @@ Fields:
 - postedAt
 
 URL: ${url}
-Text: ${scrapedData.content.slice(0, 30000)}
+Text: ${scrapedData.content.slice(0, 15000)}
     `;
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const jsonStr = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://doomboard.vercel.app", // Optional, for OpenRouter rankings
+            "X-Title": "Doomboard Scraper" // Optional, for OpenRouter rankings
+        },
+        body: JSON.stringify({
+            "model": "arcee-ai/trinity-large-preview:free",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "reasoning": { "enabled": true }
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API error: ${response.status} ${errorText}`);
+    }
+
+    const result = await response.json();
+    const aiMessage = result.choices[0].message.content;
+    const jsonStr = aiMessage.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
 }
 
