@@ -14,13 +14,10 @@
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@sparticuz/chromium": "^143.0.4",
     "@supabase/supabase-js": "^2.96.0",
-    "chromium-bidi": "^15.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "puppeteer": "^24.37.3",
-    "puppeteer-core": "^24.37.4"
+    "puppeteer": "^24.37.3"
   }
 }
