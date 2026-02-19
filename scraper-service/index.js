@@ -6,8 +6,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Gemini
+// Initialize Gemini - Using 1.5 Flash for better free tier limits (RPM)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Initialize Supabase
 const supabase = createClient(
@@ -234,6 +235,8 @@ async function scanForPendingJobs() {
         console.log(`[Scan] Found ${pendingJobs.length} pending jobs.`);
         for (const job of pendingJobs) {
             await handleJobRecord(job);
+            // Add a small 10s delay between jobs to respect API quotas
+            await new Promise(r => setTimeout(r, 10000));
         }
     }
 
