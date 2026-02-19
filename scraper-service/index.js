@@ -20,16 +20,17 @@ const USER_AGENTS = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
 ];
 
-let globalBrowser = null;
-
-async function getBrowser() {
-    if (!globalBrowser || !globalBrowser.isConnected()) {
-        globalBrowser = await puppeteer.launch({
-            headless: "new",
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
-    }
-    return globalBrowser;
+// Launch a fresh browser for each task to prevent memory leaks and zombie hangs
+async function launchFreshBrowser() {
+    return await puppeteer.launch({
+        headless: "new",
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
+    });
 }
 
 /**
@@ -39,9 +40,10 @@ async function scrapeUrlWithRetry(url, retries = 2) {
     let lastError;
     for (let i = 0; i < retries; i++) {
         let page;
+        let browser;
         try {
             console.log(`[Attempt ${i + 1}] Scraping: ${url}`);
-            const browser = await getBrowser();
+            browser = await launchFreshBrowser();
             page = await browser.newPage();
 
             await page.setRequestInterception(true);
@@ -90,10 +92,10 @@ async function scrapeUrlWithRetry(url, retries = 2) {
         } catch (err) {
             console.warn(`[Attempt ${i + 1}] Failed: ${err.message}`);
             lastError = err;
-            if (page) await page.close().catch(() => { });
-            await new Promise(resolve => setTimeout(resolve, 3000));
         } finally {
             if (page) await page.close().catch(() => { });
+            if (browser) await browser.close().catch(() => { });
+            if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
     throw lastError;
@@ -144,34 +146,75 @@ async function handleJobRecord(job) {
         if (lockError) throw lockError;
         if (!lockData || lockData.length === 0) return;
 
-        console.log('Step 1: Scraping...');
-        const scraped = await scrapeUrlWithRetry(job.normalized_url);
+        // 2-minute safety timeout for the entire processing block
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Job processing timed out (2m)')), 120000)
+        );
 
-        console.log('Step 2: AI Refining (Skills Extraction)...');
-        const refined = await refineWithAI(scraped, job.normalized_url);
+        await Promise.race([
+            (async () => {
+                console.log('Step 1: Scraping...');
+                const scraped = await scrapeUrlWithRetry(job.normalized_url);
 
-        console.log('Step 3: Updating Record...');
-        const { error } = await supabase.from('jobs').update({
-            title: refined.title,
-            company: refined.company,
-            description: refined.description,
-            skills: refined.skills || [],
-            location: refined.location,
-            salary: refined.salary,
-            work_type: refined.workType,
-            posted_at: refined.postedAt,
-            status: 'finalized'
-        }).eq('id', job.id);
+                console.log('Step 2: AI Refining (Skills Extraction)...');
+                console.log(`Sending ${scraped.content.length} characters to AI...`);
+                const refined = await refineWithAI(scraped, job.normalized_url);
+                console.log('AI Response Received:', JSON.stringify(refined).slice(0, 100) + '...');
 
-        if (error) throw error;
-        console.log(`✅ [${job.id}] Success: ${refined.title} at ${refined.company}`);
+                console.log('Step 3: Updating Record...');
+                const { error } = await supabase.from('jobs').update({
+                    title: refined.title,
+                    company: refined.company,
+                    description: refined.description,
+                    skills: refined.skills || [],
+                    location: refined.location,
+                    salary: refined.salary,
+                    work_type: refined.workType,
+                    posted_at: refined.postedAt,
+                    status: 'finalized'
+                }).eq('id', job.id);
+
+                if (error) throw error;
+                console.log(`✅ [${job.id}] Success: ${refined.title} at ${refined.company}`);
+            })(),
+            timeoutPromise
+        ]);
 
     } catch (err) {
         console.error(`❌ [${job.id}] Failed:`, err.message);
-        await supabase.from('jobs').update({
+        // Explicitly update to error state on failure
+        const { error: updateError } = await supabase.from('jobs').update({
             status: 'error',
-            description: `Background worker error: ${err.message}`
+            description: `Scraper Error: ${err.message}`
         }).eq('id', job.id);
+
+        if (updateError) console.error('Failed to update error status:', updateError.message);
+    }
+}
+
+async function handleStaleJobs() {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+    // Find jobs stuck in 'processing' for too long
+    // Note: We'd need an 'updated_at' column to do this perfectly, 
+    // but we can fallback to 'created_at' if we just started.
+    // Let's assume there's no updated_at yet, so we just check for processing jobs.
+    // For now, let's just log them and maybe reset them.
+    const { data: staleJobs, error } = await supabase
+        .from('jobs')
+        .select('id, title, status, created_at')
+        .eq('status', 'processing')
+        .lt('created_at', fiveMinutesAgo);
+
+    if (error) return;
+
+    if (staleJobs && staleJobs.length > 0) {
+        console.log(`[Stale] Found ${staleJobs.length} stale jobs. Resetting...`);
+        for (const job of staleJobs) {
+            await supabase.from('jobs')
+                .update({ status: 'error', description: 'Scraper timeout/hang detected.' })
+                .eq('id', job.id);
+        }
     }
 }
 
@@ -193,6 +236,9 @@ async function scanForPendingJobs() {
             await handleJobRecord(job);
         }
     }
+
+    // Also check for stale ones periodically
+    await handleStaleJobs();
 }
 
 async function startWorker() {
