@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Clash Display", "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+  --color-primary: #fafafa;
+  --color-primary-foreground: #18181b;
+  --color-secondary: #27272a;
+  --color-muted: #27272a;
+  --color-muted-foreground: #a1a1aa;
+}
+
+body {
+  @apply bg-background text-foreground antialiased font-body;
+  width: 360px;
+  min-height: 200px;
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-zinc-900/40 backdrop-blur-md border border-white/5;
+  }
+
+  .glass-hover {
+    @apply hover:bg-zinc-900/60 hover:border-white/10 transition-all;
+  }
+}
