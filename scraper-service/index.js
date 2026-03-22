@@ -368,24 +368,22 @@ async function startWorker() {
             await supabase.from('auth_otps').delete().eq('id', data.id);
 
             // GENERATE SUPABASE SESSION
-            // We use Supabase Admin API to generate a magic link session or sign in the user
             const { data: authData, error: authError } = await supabase.auth.admin.generateLink({
                 type: 'magiclink',
                 email: email,
-                options: {
-                    redirectTo: 'http://localhost:5173/collected'
-                }
             });
 
             if (authError) throw authError;
 
-            // Return the necessary bits for the client to sign in
-            // Supabase Magic Link usually returns an action_link.
-            // But we can just use the email/access_token properties if it returns them.
-            // Actually, for custom flow, we might need to tell client to use the link.
+            // Return tokens directly if they are available in authData.properties
+            // Most Supabase versions return hashed_token, etc.
             res.json({ 
                 message: 'OTP verified',
-                session_url: authData.properties.action_link
+                session_url: authData.properties.action_link,
+                tokens: {
+                    access_token: authData.properties.hashed_token, // Note: might need confirm endpoint fetch if hashed
+                    email: email
+                }
             });
 
         } catch (err) {

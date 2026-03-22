@@ -2,27 +2,48 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useShareIntent } from 'expo-share-intent';
-import { AppWindow, Rocket, AlertCircle, CheckCircle2, Link2, ExternalLink, XCircle } from 'lucide-react-native';
+import { AppWindow, Rocket, AlertCircle, CheckCircle2, Link2, ExternalLink, XCircle, LogOut } from 'lucide-react-native';
 import * as Linking from 'expo-linking';
 import { collectJob, type JobResponse } from './src/services/jobService';
+import { supabase } from './src/lib/supabase';
+import { AuthScreen } from './src/components/AuthScreen';
+import { Session } from '@supabase/supabase-js';
 
 export default function App() {
   const { hasShareIntent, shareIntent, resetShareIntent, error: shareError } = useShareIntent();
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<JobResponse | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+
+  useEffect(() => {
+    // Initial session check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoadingSession(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const link = shareIntent.webUrl || shareIntent.text;
-    if (hasShareIntent && link) {
+    if (hasShareIntent && link && session) {
       handleProcessShare(link);
     }
-  }, [hasShareIntent, shareIntent.text, shareIntent.webUrl]);
+  }, [hasShareIntent, shareIntent.text, shareIntent.webUrl, !!session]);
 
   const handleProcessShare = async (url: string) => {
+    if (!session?.user?.id) return;
     setIsProcessing(true);
     setResult(null);
     try {
-      const resp = await collectJob(url);
+      const resp = await collectJob(url, session.user.id);
       setResult(resp);
     } catch (err) {
       setResult({ success: false, error: 'System processing error' });
@@ -31,9 +52,25 @@ export default function App() {
     }
   };
 
-  const openWebApp = () => {
-    Linking.openURL('https://doomboard.vercel.app');
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
+
+  const openWebApp = () => {
+    Linking.openURL('http://localhost:5173'); // Updated to local dev port
+  };
+
+  if (loadingSession) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator color="#fafafa" size="large" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen onLoginSuccess={() => {}} />;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -41,13 +78,18 @@ export default function App() {
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <AppWindow color="#fafafa" size={24} />
+        <View style={styles.headerTitleWrap}>
+          <View style={styles.iconContainer}>
+            <AppWindow color="#fafafa" size={24} />
+          </View>
+          <View>
+            <Text style={styles.title}>DOOMBOARD</Text>
+            <Text style={styles.subtitle}>MOBILE COLLECTOR</Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.title}>DOOMBOARD</Text>
-          <Text style={styles.subtitle}>MOBILE COLLECTOR</Text>
-        </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <LogOut color="#71717a" size={20} />
+        </TouchableOpacity>
       </View>
 
       {/* Main Area */}
@@ -98,6 +140,9 @@ export default function App() {
             <Text style={styles.idleDescription}>
               Share a job link from your browser to Doomboard to track it instantly.
             </Text>
+            <View style={styles.userBadge}>
+              <Text style={styles.userBadgeText}>Signed in as {session.user.email}</Text>
+            </View>
           </View>
         )}
       </View>
@@ -129,13 +174,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: Platform.OS === 'android' ? 40 : 20,
     paddingBottom: 20,
+  },
+  headerTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+  },
+  logoutButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(250, 250, 250, 0.02)',
+    borderWidth: 1,
+    borderColor: 'rgba(250, 250, 250, 0.05)',
   },
   iconContainer: {
     width: 44,
@@ -192,6 +253,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 20,
+  },
+  userBadge: {
+    marginTop: 12,
+    backgroundColor: 'rgba(250, 250, 250, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(250, 250, 250, 0.05)',
+  },
+  userBadgeText: {
+    color: colors.zinc500,
+    fontSize: 11,
+    fontWeight: '700',
   },
   statusCard: {
     backgroundColor: 'rgba(250, 250, 250, 0.02)',

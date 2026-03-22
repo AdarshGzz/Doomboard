@@ -7,14 +7,18 @@ export interface JobResponse {
     job?: any;
 }
 
-export const collectJob = async (link: string): Promise<JobResponse> => {
+export const collectJob = async (link: string, userId: string): Promise<JobResponse> => {
     try {
-        // Basic duplicate check
+        if (!userId) throw new Error('User not authenticated');
+
+        // Basic duplicate check SCOPED TO USER
         const { data: existingJobs } = await supabase
             .from('jobs')
             .select('id, title, company, status')
             .eq('normalized_url', link)
-            .single();
+            .eq('user_id', userId)
+            .eq('is_deleted', false)
+            .maybeSingle();
 
         if (existingJobs) {
             return {
@@ -24,11 +28,12 @@ export const collectJob = async (link: string): Promise<JobResponse> => {
             };
         }
 
-        // Insert new job link
+        // Insert new job link with user_id
         const { error } = await supabase
             .from('jobs')
             .insert([
                 {
+                    user_id: userId,
                     normalized_url: link,
                     title: 'Mobile Clip',
                     company: 'Pending Source',
