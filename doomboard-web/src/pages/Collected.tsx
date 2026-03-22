@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 import { JobCard } from "@/components/features/JobCard";
 import { JobDetailsModal } from "@/components/features/JobDetailsModal";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -121,24 +121,26 @@ export function CollectedPage() {
 
     return (
         <div className="space-y-8 max-w-7xl mx-auto pb-20">
-            <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between px-2">
+            <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between px-2 pt-4">
                 <div className="space-y-1">
-                    <h1 className="font-display text-4xl font-black tracking-tight text-white">Collected Jobs</h1>
-                    <p className="text-zinc-500 font-medium">Auto-extracted job leads waiting for your application.</p>
+                    <h1 className="font-display text-4xl font-black tracking-tight text-gradient-hero">Collected Jobs</h1>
+                    <p className="text-muted-foreground font-medium">Auto-extracted job leads waiting for your application.</p>
                 </div>
             </div>
 
             {loading ? (
                 <div className="flex min-h-[400px] items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary" />
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : jobs.length === 0 ? (
-                <div className="flex min-h-[400px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 p-12 text-center bg-white/[0.02]">
-                    <div className="bg-primary/10 p-4 rounded-full mb-4">
-                        <Search className="h-8 w-8 text-primary/60" />
+                <div className="flex min-h-[400px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 p-12 text-center glass shadow-2xl">
+                    <div className="bg-primary/10 p-5 rounded-2xl mb-6 btn-glow-sm shadow-[0_0_20px_hsla(38,90%,55%,0.2)]">
+                        <Search className="h-10 w-10 text-primary" />
                     </div>
-                    <p className="text-xl font-bold text-white mb-2">No jobs found in your collection</p>
-                    <p className="text-zinc-500 max-w-xs">Use the DOOMBOARD browser extension to track jobs directly from LinkedIn, Indeed, and more.</p>
+                    <p className="text-2xl font-black text-gradient-hero mb-3">No leads yet</p>
+                    <p className="text-muted-foreground max-w-xs font-medium leading-relaxed">
+                        Use the DOOMBOARD browser extension to track jobs directly from LinkedIn, Indeed, and more.
+                    </p>
                 </div>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

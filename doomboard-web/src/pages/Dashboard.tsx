@@ -71,11 +71,12 @@ export function DashboardPage() {
         <div className="h-[calc(100vh-4rem)] flex flex-col space-y-6 w-full px-6">
             <div className="flex items-end justify-between pt-4">
                 <div className="space-y-1">
-                    <h1 className="font-display text-4xl font-black tracking-tight text-white leading-none">Dashboard</h1>
-                    <p className="text-zinc-500 font-medium tracking-tight">Manage and advance your active applications.</p>
+                    <h1 className="font-display text-4xl font-black tracking-tight text-gradient-hero leading-none">Dashboard</h1>
+                    <p className="text-muted-foreground font-medium tracking-tight">Manage and advance your active applications.</p>
                 </div>
-                <div className="text-xs font-mono text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-full border border-white/5">
-                    <span className="text-primary font-bold">{activeJobsCount}</span> Active Opps
+                <div className="glass px-4 py-2 rounded-xl text-xs font-black text-muted-foreground border border-white/5 flex items-center gap-2">
+                    <span className="text-primary font-bold text-lg leading-none">{activeJobsCount}</span>
+                    <span className="uppercase tracking-[0.1em]">Active Jobs</span>
                 </div>
             </div>
 

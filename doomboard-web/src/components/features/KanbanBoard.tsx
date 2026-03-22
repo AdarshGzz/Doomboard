@@ -192,30 +192,30 @@ function KanbanColumn({ id, title, jobs, onJobClick }: { id: string, title: stri
         <div
             ref={setNodeRef}
             className={cn(
-                "group flex flex-col gap-4 rounded-3xl p-4 transition-all duration-300",
-                "bg-zinc-900/40 border-2 border-transparent",
-                isOver ? "bg-primary/5 border-primary/20 ring-4 ring-primary/5" : "hover:bg-zinc-900/60"
+                "group flex flex-col gap-4 rounded-3xl p-5 transition-all duration-300",
+                "glass border-2 border-transparent",
+                isOver ? "bg-primary/10 border-primary/30 shadow-[0_0_30px_hsla(38,90%,55%,0.1)]" : "hover:bg-zinc-900/40"
             )}
         >
             <div className="flex items-center justify-between px-2">
                 <div className="flex items-center gap-3">
                     <div className={cn(
-                        "h-2 w-2 rounded-full",
-                        id === 'applied' ? "bg-blue-500" :
-                        id === 'assignment' ? "bg-amber-500" :
-                        id === 'interview' ? "bg-purple-500" : "bg-green-500"
+                        "h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor]",
+                        id === 'applied' ? "text-blue-400 bg-blue-400" :
+                        id === 'assignment' ? "text-primary bg-primary" :
+                        id === 'interview' ? "text-purple-400 bg-purple-400" : "text-accent bg-accent"
                     )} />
-                    <h3 className="font-display text-sm font-black uppercase tracking-[0.15em] text-zinc-400">
+                    <h3 className="font-display text-sm font-black uppercase tracking-[0.2em] text-muted-foreground group-hover:text-foreground transition-colors">
                         {title}
                     </h3>
                 </div>
-                <div className="bg-white/5 px-2 py-0.5 rounded-lg text-[10px] font-black text-zinc-500 font-mono border border-white/5">
+                <div className="glass px-2.5 py-1 rounded-lg text-[10px] font-black text-primary font-mono border border-primary/10">
                     {jobs.length}
                 </div>
             </div>
 
             <SortableContext items={jobs.map(j => j.id)} strategy={verticalListSortingStrategy}>
-                <div className="flex flex-col gap-3 min-h-[150px] custom-scrollbar overflow-y-auto">
+                <div className="flex flex-col gap-3.5 min-h-[200px] custom-scrollbar overflow-y-auto">
                     {jobs.map(job => (
                         <SortableJobCard key={job.id} job={job} onClick={() => onJobClick(job)} />
                     ))}
@@ -240,20 +240,28 @@ function KanbanCard({
     isOverlay?: boolean,
     disabled?: boolean
 }) {
+    // Determine card accent color
+    const accentColor = job.status === 'applied' ? "hsla(210, 100%, 50%, 0.5)" :
+                       job.status === 'assignment' ? "hsla(38, 90%, 55%, 0.5)" :
+                       job.status === 'interview' ? "hsla(280, 80%, 60%, 0.5)" : "hsla(160, 50%, 45%, 0.5)";
+
     return (
         <div className={cn(
-            "group/card relative bg-zinc-900/80 border border-white/5 p-4 rounded-2xl shadow-sm transition-all duration-200",
-            "flex flex-col gap-3 backdrop-blur-sm",
-            !disabled && "cursor-grab active:cursor-grabbing hover:border-primary/30 hover:bg-zinc-800/90 hover:shadow-xl",
+            "group/card relative glass-card p-4 rounded-2xl transition-all duration-300",
+            "flex flex-col gap-3",
+            !disabled && "cursor-grab active:cursor-grabbing hover:translate-y-[-2px] hover:glow-border hover:shadow-xl",
             isDragging && !isOverlay && "opacity-20 grayscale",
             className
-        )}>
+        )}
+        style={{ borderLeft: `3px solid ${accentColor}` }}
+        >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                    <h4 className="font-display font-black text-sm text-zinc-100 leading-tight group-hover/card:text-primary transition-colors truncate">
+                    <h4 className="font-display font-black text-sm text-foreground leading-tight group-hover/card:text-primary transition-colors truncate">
                         {job.title || "Untitled Position"}
                     </h4>
-                    <div className="text-[11px] font-bold text-zinc-500 mt-1 uppercase tracking-wider truncate">
+                    <div className="text-[11px] font-bold text-muted-foreground mt-1.5 uppercase tracking-wider truncate flex items-center gap-2">
+                        <span className="w-1 h-1 rounded-full bg-border" />
                         {job.company || "Stealth Startup"}
                     </div>
                 </div>
@@ -263,27 +271,27 @@ function KanbanCard({
                             e.stopPropagation();
                             onClick?.();
                         }}
-                        className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-700 hover:text-primary transition-all outline-none shrink-0"
+                        className="p-2 rounded-xl glass hover:bg-primary/20 text-muted-foreground hover:text-primary transition-all outline-none shrink-0"
                     >
                         <Eye className="h-4 w-4" />
                     </button>
                 )}
             </div>
 
-            <div className="flex items-center justify-between gap-2 mt-1">
+            <div className="flex items-center justify-between gap-2 mt-2">
                 <div className="flex flex-wrap gap-1.5">
                     {job.skills?.slice(0, 2).map((s, i) => (
-                        <span key={i} className="text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded bg-white/5 text-zinc-500 border border-white/5">
+                        <span key={i} className="text-[9px] font-black uppercase tracking-tighter px-2 py-1 rounded-lg glass text-muted-foreground border border-white/5">
                             {s}
                         </span>
                     ))}
                     {job.skills && job.skills.length > 2 && (
-                        <span className="text-[9px] font-black text-zinc-700 self-center px-1">
+                        <span className="text-[9px] font-black text-muted-foreground self-center px-1">
                             +{job.skills.length - 2}
                         </span>
                     )}
                 </div>
-                <GripVertical className="h-3 w-3 text-zinc-800 group-hover/card:text-zinc-600 transition-colors" />
+                <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 group-hover/card:text-muted-foreground/60 transition-colors" />
             </div>
         </div>
     );

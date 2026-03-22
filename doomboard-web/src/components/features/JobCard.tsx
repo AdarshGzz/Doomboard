@@ -21,10 +21,10 @@ interface JobCardProps {
 export function JobCard({ job, onApply, onDelete, onClick, showApply = true }: JobCardProps) {
     const getStatusConfig = (status: string) => {
         switch (status) {
-            case 'processing': return { label: 'AI Processing', className: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
-            case 'finalized': return { label: 'Tracked', className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
-            case 'error': return { label: 'Scrape Failed', className: 'bg-destructive/10 text-destructive border-destructive/20' };
-            case 'collected': return { label: 'Waiting', className: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' };
+            case 'processing': return { label: 'AI Processing', className: 'text-amber-500 border-amber-500/20 bg-amber-500/5 shadow-[0_0_10px_hsla(38,90%,55%,0.1)]' };
+            case 'finalized': return { label: 'Tracked', className: 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5 shadow-[0_0_10px_hsla(160,50%,45%,0.1)]' };
+            case 'error': return { label: 'Scrape Failed', className: 'text-destructive border-destructive/20 bg-destructive/5' };
+            case 'collected': return { label: 'Waiting', className: 'text-muted-foreground border-white/10 bg-white/5' };
             default: return null;
         }
     };
@@ -35,64 +35,65 @@ export function JobCard({ job, onApply, onDelete, onClick, showApply = true }: J
         <div
             onClick={() => onClick?.(job)}
             className={cn(
-                "group relative flex flex-col gap-4 rounded-xl border border-border bg-card p-6 transition-all",
-                "hover:border-primary/50 hover:shadow-xl hover:-translate-y-1 cursor-pointer"
+                "group relative flex flex-col gap-4 rounded-3xl p-6 transition-all duration-300",
+                "glass-card border border-white/5",
+                "hover:glow-border hover:shadow-[0_0_30px_hsla(38,90%,55%,0.1)] hover:scale-[1.01] cursor-pointer"
             )}
         >
             <div className="flex items-start justify-between gap-4 overflow-hidden">
-                <div className="space-y-1.5 flex-1 min-w-0">
+                <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                        <h3 className="font-display text-xl font-bold leading-tight tracking-tight text-foreground group-hover:text-primary transition-colors truncate min-w-0" title={job.title || "Untitled Job"}>
+                        <h3 className="font-display text-xl font-black leading-tight tracking-tight text-foreground group-hover:text-primary transition-colors truncate min-w-0" title={job.title || "Untitled Job"}>
                             {job.title || "Untitled Job"}
                         </h3>
                         {statusConfig && (
-                            <span className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0", statusConfig.className)}>
+                            <span className={cn("text-[9px] font-black uppercase tracking-[0.1em] px-2 py-1 rounded-lg border shrink-0", statusConfig.className)}>
                                 {statusConfig.label}
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground/80 overflow-hidden">
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground/80 overflow-hidden font-medium">
                         <div className="flex items-center gap-1.5 min-w-0">
-                            <Building2 className="h-4 w-4 shrink-0" />
-                            <span className="font-medium text-muted-foreground truncate">{job.company || "Unknown Company"}</span>
+                            <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                            <span className="truncate">{job.company || "Unknown Company"}</span>
                         </div>
-                        <span className="text-zinc-800 mx-0.5 shrink-0">•</span>
-                        <span className="text-xs opacity-80 shrink-0">{job.source || "Web"}</span>
+                        <span className="w-1 h-1 rounded-full bg-border shrink-0" />
+                        <span className="text-xs tracking-wide uppercase opacity-70 shrink-0 font-bold">{job.source || "Web"}</span>
                     </div>
                 </div>
-                <div className="flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex gap-2 opacity-0 transition-all duration-300 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0">
                     <Button
                         variant="secondary"
                         size="icon"
-                        className="h-9 w-9 rounded-full"
+                        className="h-10 w-10 rounded-xl glass hover:bg-primary/20 text-primary border-primary/10 shadow-lg"
                         onClick={(e) => {
                             e.stopPropagation();
                             window.open(job.normalized_url, '_blank')
                         }}
                     >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-4.5 w-4.5" />
                     </Button>
                 </div>
             </div>
 
             {job.skills && job.skills.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {job.skills.slice(0, 4).map((skill, i) => (
-                        <span key={i} className="inline-flex items-center rounded-md bg-zinc-900/50 px-2.5 py-1 text-xs font-medium text-zinc-300 border border-border/50">
+                <div className="flex flex-wrap gap-2 pt-2">
+                    {job.skills.slice(0, 3).map((skill, i) => (
+                        <span key={i} className="inline-flex items-center rounded-lg glass px-3 py-1 text-[10px] font-black uppercase tracking-tighter text-muted-foreground border border-white/5">
                             {skill}
                         </span>
                     ))}
-                    {job.skills.length > 4 && (
-                        <span className="text-xs text-muted-foreground self-center ml-1 font-mono">
-                            +{job.skills.length - 4} More
+                    {job.skills.length > 3 && (
+                        <span className="text-[10px] font-black text-muted-foreground/50 self-center ml-1">
+                            +{job.skills.length - 3}
                         </span>
                     )}
                 </div>
             )}
 
-            <div className="flex items-center justify-between pt-4 mt-auto border-t border-border/40">
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/70">
-                    <Calendar className="h-3.5 w-3.5" />
+            <div className="flex items-center justify-between pt-5 mt-auto border-t border-white/5">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                    <Calendar className="h-3.5 w-3.5 text-primary/40" />
                     <span>Added {safeDate(job.created_at)}</span>
                 </div>
                 <div className="flex gap-2">
@@ -103,7 +104,7 @@ export function JobCard({ job, onApply, onDelete, onClick, showApply = true }: J
                             e.stopPropagation();
                             onDelete(job);
                         }}
-                        className="h-8 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        className="h-9 px-4 text-[11px] font-black uppercase tracking-wider text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
                     >
                         <Trash2 className="mr-2 h-3.5 w-3.5" />
                         Remove
@@ -111,13 +112,13 @@ export function JobCard({ job, onApply, onDelete, onClick, showApply = true }: J
                     {showApply && (
                         <Button
                             size="sm"
-                            className="h-8 text-xs shadow-sm"
+                            className="h-9 px-4 text-[11px] font-black uppercase tracking-wider btn-glow bg-primary text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98] rounded-xl"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onApply(job);
                             }}
                         >
-                            <Check className="mr-2 h-3.5 w-3.5" />
+                            <Check className="mr-2 h-4 w-4" />
                             Applied
                         </Button>
                     )}

@@ -77,33 +77,35 @@ export function AuthPage() {
     };
 
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-white p-6">
-            <div className="w-full max-w-sm space-y-8 p-10 bg-white/[0.02] border border-white/5 rounded-3xl backdrop-blur-xl shadow-2xl relative">
-                <div className="absolute -top-24 -left-24 w-48 h-48 bg-primary/20 blur-[80px] rounded-full pointer-events-none" />
+        <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-dark text-white p-6 relative overflow-hidden">
+            {/* Background Gradients to match landing */}
+            <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full blur-[100px] opacity-20 pointer-events-none" style={{ background: "hsl(38, 90%, 55%)" }} />
+            <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full blur-[100px] opacity-10 pointer-events-none" style={{ background: "hsl(160, 50%, 45%)" }} />
 
-                <div className="flex flex-col items-center space-y-4 text-center relative z-10">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)]">
-                        <Lock className="h-6 w-6 text-zinc-950" />
+            <div className="w-full max-w-sm space-y-8 p-10 glass-card rounded-3xl relative z-10 glow-border">
+                <div className="flex flex-col items-center space-y-4 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary btn-glow shadow-[0_0_20px_hsla(38,90%,55%,0.3)]">
+                        <Lock className="h-6 w-6 text-primary-foreground" />
                     </div>
-                    <h1 className="font-display text-2xl font-black tracking-tighter uppercase">
+                    <h1 className="font-display text-2xl font-black tracking-tighter uppercase text-gradient-hero">
                         {step === "email" ? "Get Started" : "Verify Code"}
                     </h1>
-                    <p className="text-sm text-zinc-500 font-medium">
+                    <p className="text-sm text-muted-foreground font-medium">
                         {step === "email" 
                             ? "Enter your email to receive a secure access code" 
                             : `We sent a 6-digit code to ${email}`}
                     </p>
                 </div>
 
-                <form onSubmit={step === "email" ? handleSendOtp : handleVerifyOtp} className="space-y-4 relative z-10">
+                <form onSubmit={step === "email" ? handleSendOtp : handleVerifyOtp} className="space-y-4">
                     <div className="space-y-4">
                         {step === "email" ? (
                             <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                     type="email"
                                     placeholder="Email address"
-                                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 transition-colors"
+                                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 transition-colors rounded-xl"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
@@ -112,12 +114,12 @@ export function AuthPage() {
                             </div>
                         ) : (
                             <div className="relative">
-                                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                     type="text"
                                     placeholder="6-digit code"
                                     maxLength={6}
-                                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 text-center tracking-[0.5em] font-mono text-lg"
+                                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 text-center tracking-[0.5em] font-mono text-lg rounded-xl"
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                                     required
@@ -129,12 +131,12 @@ export function AuthPage() {
                     </div>
 
                     {error && (
-                        <div className="p-3 rounded-xl text-xs font-bold text-center border bg-red-500/10 border-red-500/20 text-red-400">
+                        <div className="p-3 rounded-xl text-xs font-bold text-center border bg-red-500/10 border-red-500/20 text-red-400 animate-pulse">
                             {error}
                         </div>
                     )}
 
-                    <Button className="w-full h-12 font-bold rounded-xl" type="submit" disabled={loading}>
+                    <Button className="w-full h-12 font-bold rounded-xl btn-glow bg-primary text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98]" type="submit" disabled={loading}>
                         {loading ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
@@ -147,10 +149,10 @@ export function AuthPage() {
                 </form>
 
                 {step === "otp" && (
-                    <div className="text-center relative z-10">
+                    <div className="text-center">
                         <button 
                             onClick={() => setStep("email")}
-                            className="text-xs text-zinc-500 hover:text-white transition-colors"
+                            className="text-xs text-muted-foreground hover:text-primary transition-colors font-medium underline underline-offset-4"
                             disabled={loading}
                         >
                             Change Email
