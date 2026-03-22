@@ -1,13 +1,33 @@
 require('dotenv').config();
 const puppeteer = require('puppeteer');
 const express = require('express');
+const cors = require('cors');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase
+// Initialize Supabase (with Service Role Key for Admin actions)
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// Mailer Setup (Robust configuration from verified test script)
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '465'),
+    secure: process.env.SMTP_PORT === '465' || process.env.SMTP_PORT === '587' ? (process.env.SMTP_PORT === '465') : false,
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+    // Enhanced stability for restrictive networks
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
+    debug: true, 
+    logger: true 
+});
 
 const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
@@ -267,6 +287,113 @@ async function startWorker() {
     // Basic Health Check Server
     const app = express();
     const port = process.env.PORT || 3001;
+
+    app.use(cors());
+    app.use(express.json());
+
+    // --- AUTH OTP ENDPOINTS ---
+
+    // 1. Send OTP
+    app.post('/api/auth/send-otp', async (req, res) => {
+        console.log(`[AUTH] Received Send-OTP request for: ${req.body?.email}`);
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+
+        try {
+            // Generate 6-digit OTP
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+            // Save to DB (hashed for security)
+            const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+            
+            const { error: dbError } = await supabase
+                .from('auth_otps')
+                .insert([{ email, otp_hash: otpHash, expires_at: expiresAt.toISOString() }]);
+
+            if (dbError) throw dbError;
+
+            // Send Email
+            const mailOptions = {
+                from: process.env.EMAIL_FROM || `"Doomboard Auth" <${process.env.SMTP_USER}>`,
+                to: email,
+                subject: 'Your Doomboard Access Code',
+                text: `Your login code is: ${otp}. It expires in 5 minutes.`,
+                html: `
+                    <div style="font-family: sans-serif; padding: 40px; background: #000; color: #fff; border-radius: 20px;">
+                        <h1 style="color: #fff; margin-bottom: 20px;">Verification Code</h1>
+                        <p style="color: #666; font-size: 16px;">Use the code below to sign in to your Doomboard account.</p>
+                        <div style="background: #111; padding: 20px; font-size: 32px; font-weight: bold; letter-spacing: 10px; border-radius: 10px; text-align: center; margin: 30px 0; border: 1px solid #333;">
+                            ${otp}
+                        </div>
+                        <p style="color: #444; font-size: 12px;">This code will expire in 5 minutes.</p>
+                    </div>
+                `,
+            };
+
+            await transporter.sendMail(mailOptions);
+            console.log(`[OTP] Sent to ${email}`);
+            
+            res.json({ message: 'OTP sent successfully' });
+        } catch (err) {
+            console.error('[OTP Error]', err);
+            res.status(500).json({ error: 'Failed to send OTP. Check SMTP settings.' });
+        }
+    });
+
+    // 2. Verify OTP
+    app.post('/api/auth/verify-otp', async (req, res) => {
+        const { email, otp } = req.body;
+        if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
+
+        try {
+            const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+            // Find valid OTP
+            const { data, error: dbError } = await supabase
+                .from('auth_otps')
+                .select('*')
+                .eq('email', email)
+                .eq('otp_hash', otpHash)
+                .gt('expires_at', new Date().toISOString())
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (dbError || !data) {
+                return res.status(401).json({ error: 'Invalid or expired OTP' });
+            }
+
+            // Cleanup OTP after use
+            await supabase.from('auth_otps').delete().eq('id', data.id);
+
+            // GENERATE SUPABASE SESSION
+            // We use Supabase Admin API to generate a magic link session or sign in the user
+            const { data: authData, error: authError } = await supabase.auth.admin.generateLink({
+                type: 'magiclink',
+                email: email,
+                options: {
+                    redirectTo: 'http://localhost:5173/collected'
+                }
+            });
+
+            if (authError) throw authError;
+
+            // Return the necessary bits for the client to sign in
+            // Supabase Magic Link usually returns an action_link.
+            // But we can just use the email/access_token properties if it returns them.
+            // Actually, for custom flow, we might need to tell client to use the link.
+            res.json({ 
+                message: 'OTP verified',
+                session_url: authData.properties.action_link
+            });
+
+        } catch (err) {
+            console.error('[Verify Error]', err);
+            res.status(500).json({ error: 'Authentication failed' });
+        }
+    });
+
     app.get('/', (req, res) => res.send('DOOMBOARD Scraper Active'));
     app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
     app.listen(port, () => console.log(`Health check server on port ${port}`));
@@ -306,8 +433,7 @@ startWorker().catch(err => {
     process.exit(1);
 });
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
     console.log('\nWorker shutting down...');
-    if (globalBrowser) await globalBrowser.close();
     process.exit();
 });

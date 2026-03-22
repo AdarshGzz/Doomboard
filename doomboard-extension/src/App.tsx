@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CollectorView,
   SavedView,
   DuplicateView,
-  ErrorView
+  ErrorView,
+  UnauthorizedView
 } from './views/ExtensionViews';
 import { collectJob, type JobResponse } from './services/jobService';
+import { syncSession } from './utils/supabaseClient';
 
 // Define possible states
 type ExtensionState =
@@ -13,12 +15,27 @@ type ExtensionState =
   | 'saving'
   | 'saved'
   | 'duplicate'
-  | 'error';
+  | 'error'
+  | 'unauthorized'
+  | 'checking';
 
 function App() {
-  const [viewState, setViewState] = useState<ExtensionState>('idle');
+  const [viewState, setViewState] = useState<ExtensionState>('checking');
   const [errorMsg, setErrorMsg] = useState<string | undefined>(undefined);
   const [duplicateData, setDuplicateData] = useState<{ title: string; company: string; status: string } | null>(null);
+
+  useEffect(() => {
+    handleSync();
+  }, []);
+
+  const handleSync = async () => {
+    const isAuthed = await syncSession();
+    if (isAuthed) {
+      setViewState('idle');
+    } else {
+      setViewState('unauthorized');
+    }
+  };
 
   // --- Handlers ---
 
@@ -72,6 +89,10 @@ function App() {
   // --- Render Logic ---
 
   switch (viewState) {
+    case 'checking':
+      return <div className="h-full flex items-center justify-center p-8 text-zinc-500 font-bold uppercase tracking-widest animate-pulse">Checking Session...</div>;
+    case 'unauthorized':
+      return <UnauthorizedView onLogin={handleOpenWebApp} />;
     case 'idle':
     case 'saving':
       return <CollectorView onPush={handlePushLink} isSaving={viewState === 'saving'} />;

@@ -64,7 +64,7 @@ export function DashboardPage() {
         loadJobs();
     };
 
-    const activeStages = ['applied', 'assignment', 'interview_r1', 'interview_r2', 'interview_r3', 'hr', 'offer'];
+    const activeStages = ['applied', 'assignment', 'interview', 'offer'];
     const activeJobsCount = jobs.filter(j => activeStages.includes(j.status)).length;
 
     return (

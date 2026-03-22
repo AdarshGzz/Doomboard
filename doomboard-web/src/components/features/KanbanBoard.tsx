@@ -9,6 +9,7 @@ import {
     useSensors,
     type DragEndEvent,
     type DragStartEvent,
+    useDroppable,
 } from "@dnd-kit/core";
 import {
     SortableContext,
@@ -18,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import { Eye } from "lucide-react";
+import { Eye, GripVertical } from "lucide-react";
 import type { Job } from "@/types";
 import { updateJobStatus } from "@/services/jobService";
 
@@ -26,10 +27,7 @@ import { updateJobStatus } from "@/services/jobService";
 const COLUMNS = [
     { id: 'applied', title: 'Applied' },
     { id: 'assignment', title: 'Assignment' },
-    { id: 'interview_r1', title: 'Interview R1' },
-    { id: 'interview_r2', title: 'Interview R2' },
-    { id: 'interview_r3', title: 'Interview R3' },
-    { id: 'hr', title: 'HR' },
+    { id: 'interview', title: 'Interview' },
     { id: 'offer', title: 'Offer' }
 ];
 
@@ -41,8 +39,6 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps) {
     const [activeId, setActiveId] = useState<string | null>(null);
-
-    // Group jobs by column
     const [columns, setColumns] = useState<Record<string, Job[]>>({});
 
     useEffect(() => {
@@ -57,7 +53,11 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
     }, [jobs]);
 
     const sensors = useSensors(
-        useSensor(PointerSensor),
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
         })
@@ -74,7 +74,6 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
         const activeIdStr = active.id as string;
         const overIdStr = over.id as string;
 
-        // Find active and over containers
         const activeContainer = findContainer(activeIdStr);
         const overContainer = findContainer(overIdStr);
 
@@ -86,7 +85,6 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
             const activeItems = prev[activeContainer];
             const overItems = prev[overContainer];
 
-            // Find indexes
             const activeIndex = activeItems.findIndex((item) => item.id === activeIdStr);
             const overIndex = overItems.findIndex((item) => item.id === overIdStr);
 
@@ -105,7 +103,6 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
             }
 
             const itemToMove = activeItems[activeIndex];
-            // Update status of the moved item locally for immediate feedback
             const updatedItem = { ...itemToMove, status: overContainer as Job["status"] };
 
             return {
@@ -122,7 +119,7 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
 
     const findContainer = (id: string) => {
         if (columns[id]) return id;
-        return Object.keys(columns).find((key) => columns[key].find((item) => item.id === id));
+        return Object.keys(columns).find((key) => columns[key].some((item) => item.id === id));
     };
 
     const handleDragEnd = async (event: DragEndEvent) => {
@@ -139,11 +136,11 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
 
         if (activeJob && overContainer && activeJob.status !== overContainer) {
             try {
-                await updateJobStatus(activeJob.id, overContainer);
-                onJobUpdate(); // Refresh from source of truth
+                await updateJobStatus(activeJob.id, overContainer as Job["status"]);
+                onJobUpdate();
             } catch (err) {
                 console.error("Move failed", err);
-                onJobUpdate(); // Revert on failure
+                onJobUpdate();
             }
         }
     };
@@ -158,7 +155,7 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
         >
-            <div className="flex bg-zinc-950 h-full overflow-x-auto gap-6 pb-8 px-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <div className="grid grid-cols-4 h-full gap-6 pb-12 px-2 overflow-hidden">
                 {COLUMNS.map(col => (
                     <KanbanColumn
                         key={col.id}
@@ -170,24 +167,17 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
                 ))}
             </div>
             <DragOverlay dropAnimation={{
-                duration: 250,
+                duration: 200,
                 easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
             }}>
                 {activeId && activeJob ? (
-                    <div className="w-80 rotate-[2deg] scale-105 transition-transform duration-200">
-                        <div className={cn(
-                            "bg-zinc-800 border-2 border-primary/50 p-4 rounded-xl shadow-2xl",
-                            "flex flex-col gap-2"
-                        )}>
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="font-bold text-sm text-white line-clamp-2 leading-snug">
-                                    {activeJob.title || "Untitled Job"}
-                                </div>
-                            </div>
-                            <div className="text-[11px] font-medium text-zinc-300">
-                                {activeJob.company || "Unknown Company"}
-                            </div>
-                        </div>
+                    <div className="w-full max-w-[calc(25vw-2rem)]">
+                        <KanbanCard 
+                            job={activeJob} 
+                            isDragging 
+                            disabled 
+                            className="rotate-[3deg] scale-[1.02] shadow-2xl border-primary/40 ring-4 ring-primary/10"
+                        />
                     </div>
                 ) : null}
             </DragOverlay>
@@ -196,27 +186,105 @@ export function KanbanBoard({ jobs, onJobUpdate, onJobClick }: KanbanBoardProps)
 }
 
 function KanbanColumn({ id, title, jobs, onJobClick }: { id: string, title: string, jobs: Job[], onJobClick: (j: Job) => void }) {
-    const { setNodeRef } = useSortable({ id });
+    const { setNodeRef, isOver } = useDroppable({ id });
 
     return (
         <div
             ref={setNodeRef}
-            className="flex-shrink-0 w-80 flex flex-col gap-3 rounded-lg bg-zinc-900/50 p-3 border border-zinc-800"
+            className={cn(
+                "group flex flex-col gap-4 rounded-3xl p-4 transition-all duration-300",
+                "bg-zinc-900/40 border-2 border-transparent",
+                isOver ? "bg-primary/5 border-primary/20 ring-4 ring-primary/5" : "hover:bg-zinc-900/60"
+            )}
         >
-            <div className="flex items-center justify-between px-1">
-                <h3 className="font-semibold text-sm text-zinc-400 uppercase tracking-wider">
-                    {title}
-                </h3>
-                <span className="text-xs text-zinc-600 font-mono">{jobs.length}</span>
+            <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-3">
+                    <div className={cn(
+                        "h-2 w-2 rounded-full",
+                        id === 'applied' ? "bg-blue-500" :
+                        id === 'assignment' ? "bg-amber-500" :
+                        id === 'interview' ? "bg-purple-500" : "bg-green-500"
+                    )} />
+                    <h3 className="font-display text-sm font-black uppercase tracking-[0.15em] text-zinc-400">
+                        {title}
+                    </h3>
+                </div>
+                <div className="bg-white/5 px-2 py-0.5 rounded-lg text-[10px] font-black text-zinc-500 font-mono border border-white/5">
+                    {jobs.length}
+                </div>
             </div>
 
             <SortableContext items={jobs.map(j => j.id)} strategy={verticalListSortingStrategy}>
-                <div className="flex flex-col gap-3 min-h-[100px]">
+                <div className="flex flex-col gap-3 min-h-[150px] custom-scrollbar overflow-y-auto">
                     {jobs.map(job => (
                         <SortableJobCard key={job.id} job={job} onClick={() => onJobClick(job)} />
                     ))}
                 </div>
             </SortableContext>
+        </div>
+    );
+}
+
+function KanbanCard({ 
+    job, 
+    onClick, 
+    className, 
+    isDragging, 
+    isOverlay,
+    disabled = false
+}: { 
+    job: Job, 
+    onClick?: () => void, 
+    className?: string, 
+    isDragging?: boolean,
+    isOverlay?: boolean,
+    disabled?: boolean
+}) {
+    return (
+        <div className={cn(
+            "group/card relative bg-zinc-900/80 border border-white/5 p-4 rounded-2xl shadow-sm transition-all duration-200",
+            "flex flex-col gap-3 backdrop-blur-sm",
+            !disabled && "cursor-grab active:cursor-grabbing hover:border-primary/30 hover:bg-zinc-800/90 hover:shadow-xl",
+            isDragging && !isOverlay && "opacity-20 grayscale",
+            className
+        )}>
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                    <h4 className="font-display font-black text-sm text-zinc-100 leading-tight group-hover/card:text-primary transition-colors truncate">
+                        {job.title || "Untitled Position"}
+                    </h4>
+                    <div className="text-[11px] font-bold text-zinc-500 mt-1 uppercase tracking-wider truncate">
+                        {job.company || "Stealth Startup"}
+                    </div>
+                </div>
+                {!disabled && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onClick?.();
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-700 hover:text-primary transition-all outline-none shrink-0"
+                    >
+                        <Eye className="h-4 w-4" />
+                    </button>
+                )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 mt-1">
+                <div className="flex flex-wrap gap-1.5">
+                    {job.skills?.slice(0, 2).map((s, i) => (
+                        <span key={i} className="text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded bg-white/5 text-zinc-500 border border-white/5">
+                            {s}
+                        </span>
+                    ))}
+                    {job.skills && job.skills.length > 2 && (
+                        <span className="text-[9px] font-black text-zinc-700 self-center px-1">
+                            +{job.skills.length - 2}
+                        </span>
+                    )}
+                </div>
+                <GripVertical className="h-3 w-3 text-zinc-800 group-hover/card:text-zinc-600 transition-colors" />
+            </div>
         </div>
     );
 }
@@ -232,9 +300,8 @@ function SortableJobCard({ job, onClick }: { job: Job, onClick: () => void }) {
     } = useSortable({ id: job.id });
 
     const style = {
-        transform: CSS.Transform.toString(transform),
+        transform: CSS.Translate.toString(transform),
         transition,
-        opacity: isDragging ? 0.3 : 1,
     };
 
     return (
@@ -244,55 +311,13 @@ function SortableJobCard({ job, onClick }: { job: Job, onClick: () => void }) {
             {...attributes}
             {...listeners}
             onClick={() => onClick()}
-            className="group outline-none"
+            className="outline-none"
         >
-            {isDragging ? (
-                <div className="h-[100px] rounded-xl border-2 border-dashed border-white/10 bg-white/[0.02]" />
-            ) : (
-                <div className={cn(
-                    "cursor-grab active:cursor-grabbing bg-zinc-900 border border-white/5 p-4 rounded-xl shadow-sm transition-all",
-                    "hover:border-primary/40 hover:bg-zinc-800/80 hover:shadow-md",
-                    "flex flex-col gap-2"
-                )}>
-                    <div className="flex items-start justify-between gap-2">
-                        <div className="font-bold text-sm text-zinc-100 line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-                            {job.title || "Untitled Job"}
-                        </div>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onClick();
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-500 hover:text-white transition-all outline-none"
-                            title="View Details"
-                        >
-                            <Eye className="h-4 w-4" />
-                        </button>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 mt-1">
-                        <div className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
-                            <span className="truncate">{job.company || "Unknown Company"}</span>
-                        </div>
-                    </div>
-
-                    {job.skills && job.skills.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1 drop-shadow-sm">
-                            {job.skills.slice(0, 2).map((s, i) => (
-                                <span key={i} className="text-[9px] font-bold uppercase tracking-tighter px-1.5 py-0.5 rounded bg-white/5 text-zinc-500 border border-white/5">
-                                    {s}
-                                </span>
-                            ))}
-                            {job.skills.length > 2 && (
-                                <span className="text-[9px] text-zinc-700 font-bold self-center">
-                                    +{job.skills.length - 2}
-                                </span>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
+            <KanbanCard 
+                job={job} 
+                onClick={onClick} 
+                isDragging={isDragging}
+            />
         </div>
     );
 }

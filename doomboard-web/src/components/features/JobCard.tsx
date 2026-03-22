@@ -39,25 +39,25 @@ export function JobCard({ job, onApply, onDelete, onClick, showApply = true }: J
                 "hover:border-primary/50 hover:shadow-xl hover:-translate-y-1 cursor-pointer"
             )}
         >
-            <div className="flex items-start justify-between">
-                <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                        <h3 className="font-display text-xl font-bold leading-tight tracking-tight text-foreground group-hover:text-primary transition-colors">
+            <div className="flex items-start justify-between gap-4 overflow-hidden">
+                <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        <h3 className="font-display text-xl font-bold leading-tight tracking-tight text-foreground group-hover:text-primary transition-colors truncate min-w-0" title={job.title || "Untitled Job"}>
                             {job.title || "Untitled Job"}
                         </h3>
                         {statusConfig && (
-                            <span className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border", statusConfig.className)}>
+                            <span className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0", statusConfig.className)}>
                                 {statusConfig.label}
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground/80">
-                        <div className="flex items-center gap-1.5">
-                            <Building2 className="h-4 w-4" />
-                            <span className="font-medium text-muted-foreground">{job.company || "Unknown Company"}</span>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground/80 overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <Building2 className="h-4 w-4 shrink-0" />
+                            <span className="font-medium text-muted-foreground truncate">{job.company || "Unknown Company"}</span>
                         </div>
-                        <span className="text-zinc-800 mx-0.5">•</span>
-                        <span className="text-xs opacity-80">{job.source || "Web"}</span>
+                        <span className="text-zinc-800 mx-0.5 shrink-0">•</span>
+                        <span className="text-xs opacity-80 shrink-0">{job.source || "Web"}</span>
                     </div>
                 </div>
                 <div className="flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">

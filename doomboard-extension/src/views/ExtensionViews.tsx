@@ -84,3 +84,23 @@ export const ErrorView: React.FC<{ message?: string; onRetry: () => void; onOpen
         </div>
     </Layout>
 );
+
+export const UnauthorizedView: React.FC<{ onLogin: () => void }> = ({ onLogin }) => (
+    <Layout>
+        <Header title="Signin Required" icon={<AlertCircle className="h-5 w-5 text-primary" />} />
+        <div className="flex-1 flex flex-col gap-4">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 bg-zinc-900/40 rounded-3xl border border-white/5 border-dashed">
+                <div className="w-16 h-16 rounded-3xl bg-primary/5 flex items-center justify-center mb-4">
+                    <AlertCircle className="h-8 w-8 text-primary" />
+                </div>
+                <div className="text-center">
+                    <h3 className="text-zinc-100 font-bold text-sm">Not Signed In</h3>
+                    <p className="text-zinc-500 text-xs font-medium mt-1">Please log in to the web app first.</p>
+                </div>
+            </div>
+            <div className="mt-auto">
+                <PrimaryButton onClick={onLogin}>Go to Login</PrimaryButton>
+            </div>
+        </div>
+    </Layout>
+);

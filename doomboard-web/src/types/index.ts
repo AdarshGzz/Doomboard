@@ -8,22 +8,14 @@ export interface Job {
     salary?: string;
     posted_at?: string;
     work_type?: string;
-    status: 'collected' | 'processing' | 'finalized' | 'error' | 'applied' | 'assignment' | 'interview_r1' | 'interview_r2' | 'interview_r3' | 'hr' | 'offer' | 'rejected' | 'ghosted';
-    resume_used_id?: string;
+    status: 'collected' | 'processing' | 'finalized' | 'error' | 'applied' | 'assignment' | 'interview' | 'offer' | 'rejected' | 'ghosted';
     is_deleted: boolean;
     skills?: string[];
     notes?: string;
     source?: string;
-    resumes?: { name: string; file_url: string; created_at: string } | null;
     created_at: string;
 }
 
-export interface Resume {
-    id: string;
-    name: string;
-    file_url: string;
-    created_at: string;
-}
 
 export interface AppConfig {
     id: number;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, ExternalLink, Trash2, Check, RefreshCw, FileText } from "lucide-react";
+import { X, ExternalLink, Trash2, Check, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import type { Job } from "@/types";
 import { softDeleteJob, updateJobNotes } from "@/services/jobService";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,8 @@ export function JobDetailsModal({ job, onClose, onUpdate }: JobDetailsModalProps
     const [notes, setNotes] = useState("");
     const [saving, setSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         // Initialize from prop only when job ID changes
@@ -60,10 +63,17 @@ export function JobDetailsModal({ job, onClose, onUpdate }: JobDetailsModalProps
     if (!job) return null;
 
     const handleDelete = async () => {
-        if (!confirm("Move to trash?")) return;
-        await softDeleteJob(job.id);
-        onUpdate();
-        onClose();
+        setIsDeleting(true);
+        try {
+            await softDeleteJob(job.id);
+            onUpdate();
+            onClose();
+        } catch (err) {
+            console.error("Delete failed", err);
+        } finally {
+            setIsDeleting(false);
+            setIsConfirmOpen(false);
+        }
     };
 
     return (
@@ -78,9 +88,10 @@ export function JobDetailsModal({ job, onClose, onUpdate }: JobDetailsModalProps
                                 "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border",
                                 job.status === 'collected' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                                     job.status === 'processing' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                                        "bg-green-500/10 text-green-400 border-green-500/20"
+                                        job.status === 'interview' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
+                                            "bg-green-500/10 text-green-400 border-green-500/20"
                             )}>
-                                {job.status}
+                                {job.status.replace('_', ' ')}
                             </span>
                         </div>
                         <h2 className="text-4xl font-black font-display tracking-tight text-white leading-tight">
@@ -129,35 +140,6 @@ export function JobDetailsModal({ job, onClose, onUpdate }: JobDetailsModalProps
                                         </div>
                                     ) : null)}
 
-                                    {job.resumes && (
-                                        <div className="flex flex-col gap-3">
-                                            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-600">Attached Resume</h3>
-                                            <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-950/30 border border-white/5 hover:border-white/10 transition-all group/resume shadow-inner">
-                                                <div className="flex items-center gap-4 min-w-0">
-                                                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center border border-white/10 group-hover/resume:border-primary/30 transition-colors">
-                                                        <FileText className="h-6 w-6 text-zinc-400 group-hover/resume:text-primary transition-colors" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-base font-bold text-zinc-100 truncate pr-2" title={job.resumes.name}>
-                                                            {job.resumes.name}
-                                                        </p>
-                                                        <p className="text-xs font-medium text-zinc-600 mt-0.5">
-                                                            Uploaded {job.resumes.created_at ? new Date(job.resumes.created_at).toLocaleDateString() : 'N/A'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <a
-                                                    href={job.resumes.file_url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="px-6 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-sm font-bold border border-white/5 transition-all shadow-sm flex items-center gap-2"
-                                                >
-                                                    Download
-                                                    <ExternalLink className="h-3.5 w-3.5 opacity-50" />
-                                                </a>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
@@ -222,7 +204,7 @@ export function JobDetailsModal({ job, onClose, onUpdate }: JobDetailsModalProps
                 <div className="border-t border-white/5 p-8 bg-zinc-950/50 flex justify-between items-center">
                     <Button
                         variant="ghost"
-                        onClick={handleDelete}
+                        onClick={() => setIsConfirmOpen(true)}
                         className="text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all font-bold text-sm"
                     >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -239,6 +221,17 @@ export function JobDetailsModal({ job, onClose, onUpdate }: JobDetailsModalProps
                     </div>
                 </div>
             </div>
+
+            <ConfirmationModal
+                isOpen={isConfirmOpen}
+                onClose={() => setIsConfirmOpen(false)}
+                onConfirm={handleDelete}
+                title="Move to Trash"
+                message={`Are you sure you want to discard "${job.title}"?`}
+                type="danger"
+                isLoading={isDeleting}
+                confirmText="Discard Lead"
+            />
         </div>
     );
 }

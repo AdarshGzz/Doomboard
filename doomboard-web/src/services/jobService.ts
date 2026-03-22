@@ -27,13 +27,13 @@ export const getTrashJobs = async () => {
 export const getDashboardJobs = async () => {
     const { data, error } = await supabase
         .from("jobs")
-        .select("*, resumes(name, file_url, created_at)")
+        .select("*")
         .not("status", "in", "('collected','processing','finalized','error')")
         .eq("is_deleted", false)
         .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data as (Job & { resumes: { name: string; file_url: string; created_at: string } | null })[];
+    return data as Job[];
 };
 
 export const updateJobStatus = async (id: string, status: string) => {
@@ -72,12 +72,11 @@ export const deleteJobForever = async (id: string) => {
     if (error) throw error;
 };
 
-export const applyJob = async (id: string, resumeId: string) => {
+export const applyJob = async (id: string) => {
     const { error } = await supabase
         .from("jobs")
         .update({
-            status: 'applied',
-            resume_used_id: resumeId
+            status: 'applied'
         })
         .eq("id", id);
 

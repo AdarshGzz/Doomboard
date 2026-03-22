@@ -3,12 +3,17 @@
     "name": "Doomboard Private Job Tracker",
     "version": "1.0.0",
     "description": "Capture job links instantly and prevent duplicates.",
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://saxgnrkwbxrioomdwrsp.supabase.co https://*.supabase.co"
+    },
     "permissions": [
         "storage",
         "activeTab",
-        "scripting"
+        "scripting",
+        "cookies"
     ],
     "host_permissions": [
+        "http://localhost/*",
         "http://*/*",
         "https://*/*"
     ],

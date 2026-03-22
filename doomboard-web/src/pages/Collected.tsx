@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Search } from "lucide-react";
 import { JobCard } from "@/components/features/JobCard";
 import { JobDetailsModal } from "@/components/features/JobDetailsModal";
-import { ResumeModal } from "@/components/features/ResumeModal";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { getCollectedJobs, softDeleteJob, applyJob } from "@/services/jobService";
 import type { Job } from "@/types";
 
@@ -12,8 +12,21 @@ export function CollectedPage() {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
     const [jobToView, setJobToView] = useState<Job | null>(null);
-    const [jobToApply, setJobToApply] = useState<Job | null>(null);
-    const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+    const [confirmConfig, setConfirmConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        type: 'danger' | 'info';
+        isLoading?: boolean;
+        confirmText?: string;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        type: 'info'
+    });
 
     useEffect(() => {
         loadJobs();
@@ -33,19 +46,15 @@ export function CollectedPage() {
                 const exists = prev.find(j => j.id === updatedJob.id);
                 const isTracked = ["collected", "processing", "finalized", "error"].includes(updatedJob.status);
 
-                // If it shouldn't be here anymore
                 if (!isTracked || updatedJob.is_deleted) {
                     return prev.filter(j => j.id !== updatedJob.id);
                 }
-                // If it should be here but wasn't
                 if (!exists) {
                     return [updatedJob, ...prev];
                 }
-                // Update existing
                 return prev.map(j => j.id === updatedJob.id ? updatedJob : j);
             });
 
-            // Update modal if open
             if (jobToView?.id === updatedJob.id) {
                 setJobToView(updatedJob);
             }
@@ -68,33 +77,47 @@ export function CollectedPage() {
     };
 
     const handleApplyClick = (job: Job) => {
-        setJobToApply(job);
-        setIsResumeModalOpen(true);
+        setConfirmConfig({
+            isOpen: true,
+            title: "Move to Dashboard",
+            message: `Mark "${job.title}" as applied and move to your active board?`,
+            type: 'info',
+            onConfirm: async () => {
+                setConfirmConfig(prev => ({ ...prev, isLoading: true }));
+                try {
+                    await applyJob(job.id);
+                    setJobs(prev => prev.filter(j => j.id !== job.id));
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                } catch (err) {
+                    console.error("Failed to apply", err);
+                } finally {
+                    setConfirmConfig(prev => ({ ...prev, isLoading: false }));
+                }
+            }
+        });
     };
 
-    const handleApplyConfirm = async (resumeId: string) => {
-        if (!jobToApply) return;
-        try {
-            await applyJob(jobToApply.id, resumeId);
-            // Remove from list optimistically
-            setJobs(jobs.filter(j => j.id !== jobToApply.id));
-            setIsResumeModalOpen(false);
-        } catch (err) {
-            console.error("Failed to apply", err);
-            alert("Failed to update status");
-        }
+    const handleDelete = (job: Job) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: "Remove Lead",
+            message: `Are you sure you want to remove this job from your collection?`,
+            type: 'danger',
+            confirmText: "Remove",
+            onConfirm: async () => {
+                setConfirmConfig(prev => ({ ...prev, isLoading: true }));
+                try {
+                    await softDeleteJob(job.id);
+                    setJobs(prev => prev.filter(j => j.id !== job.id));
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                } catch (err) {
+                    console.error("Failed to delete", err);
+                } finally {
+                    setConfirmConfig(prev => ({ ...prev, isLoading: false }));
+                }
+            }
+        });
     };
-
-    const handleDelete = async (job: Job) => {
-        if (!confirm("Move to trash?")) return;
-        try {
-            await softDeleteJob(job.id);
-            setJobs(jobs.filter(j => j.id !== job.id));
-        } catch (err) {
-            console.error("Failed to delete", err);
-        }
-    };
-
 
     return (
         <div className="space-y-8 max-w-7xl mx-auto pb-20">
@@ -137,10 +160,15 @@ export function CollectedPage() {
                 onUpdate={loadJobs}
             />
 
-            <ResumeModal
-                isOpen={isResumeModalOpen}
-                onClose={() => setIsResumeModalOpen(false)}
-                onConfirm={handleApplyConfirm}
+            <ConfirmationModal
+                isOpen={confirmConfig.isOpen}
+                onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmConfig.onConfirm}
+                title={confirmConfig.title}
+                message={confirmConfig.message}
+                type={confirmConfig.type}
+                isLoading={confirmConfig.isLoading}
+                confirmText={confirmConfig.confirmText}
             />
         </div>
     );
