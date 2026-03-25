@@ -8,6 +8,7 @@ import { collectJob, type JobResponse } from './src/services/jobService';
 import { supabase } from './src/lib/supabase';
 import { AuthScreen } from './src/components/AuthScreen';
 import { Session } from '@supabase/supabase-js';
+import { CONFIG } from './src/config';
 
 export default function App() {
   const { hasShareIntent, shareIntent, resetShareIntent, error: shareError } = useShareIntent();
@@ -57,7 +58,7 @@ export default function App() {
   };
 
   const openWebApp = () => {
-    Linking.openURL('http://localhost:5173'); // Updated to local dev port
+    Linking.openURL(CONFIG.WEB_APP_URL);
   };
 
   if (loadingSession) {

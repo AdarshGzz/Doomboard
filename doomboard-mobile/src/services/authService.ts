@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabase';
 
-const SCRAPER_URL = 'http://localhost:3001'; // Fallback; change to Mac IP for real device testing
+import { CONFIG } from '../config';
+
+const SCRAPER_URL = CONFIG.SCRAPER_URL;
 
 export interface AuthResponse {
     success: boolean;
