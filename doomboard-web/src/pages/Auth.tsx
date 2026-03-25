@@ -13,7 +13,8 @@ export function AuthPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    const SCRAPER_URL = "http://localhost:3001"; // Port used by scraper-service
+    // Use environment variable for the scraper service URL
+    const SCRAPER_URL = import.meta.env.VITE_SCRAPER_URL || "http://localhost:3001";
 
     useEffect(() => {
         // Redirct if already logged in
