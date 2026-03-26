@@ -14,16 +14,16 @@ const supabase = createClient(
 
 // Mailer Setup (Robust configuration from verified test script)
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: process.env.SMTP_PORT === '465' || process.env.SMTP_PORT === '587' ? (process.env.SMTP_PORT === '465') : false,
+    host: 'smtp.gmail.com',
+    port: 587, // HARDCODED for reliability in this debug phase
+    secure: false, // Must be false for 587 (uses STARTTLS)
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
     // Enhanced stability for restrictive networks
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
+    connectionTimeout: 30000, 
+    greetingTimeout: 30000,
     socketTimeout: 30000,
     debug: true, 
     logger: true 
