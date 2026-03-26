@@ -1,10 +1,14 @@
 require('dotenv').config();
+require('dotenv').config({ path: '.env.local' });
 const puppeteer = require('puppeteer');
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Resend (HTTP API instead of SMTP to bypass Render block)
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Initialize Supabase (with Service Role Key for Admin actions)
 const supabase = createClient(
@@ -12,22 +16,7 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Mailer Setup (Robust configuration from verified test script)
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587, // HARDCODED for reliability in this debug phase
-    secure: false, // Must be false for 587 (uses STARTTLS)
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-    // Enhanced stability for restrictive networks
-    connectionTimeout: 30000, 
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-    debug: true, 
-    logger: true 
-});
+// Mailer Setup - DEPRECATED: Switched to Resend HTTP API
 
 const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
@@ -318,12 +307,11 @@ async function startWorker() {
 
             if (dbError) throw dbError;
 
-            // Send Email
-            const mailOptions = {
-                from: process.env.EMAIL_FROM || `"Doomboard Auth" <${process.env.SMTP_USER}>`,
+            // Send Email via Resend HTTP API
+            const { error: mailError } = await resend.emails.send({
+                from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
                 to: email,
                 subject: 'Your Doomboard Access Code',
-                text: `Your login code is: ${otp}. It expires in 5 minutes.`,
                 html: `
                     <div style="font-family: sans-serif; padding: 40px; background: #000; color: #fff; border-radius: 20px;">
                         <h1 style="color: #fff; margin-bottom: 20px;">Verification Code</h1>
@@ -334,9 +322,9 @@ async function startWorker() {
                         <p style="color: #444; font-size: 12px;">This code will expire in 5 minutes.</p>
                     </div>
                 `,
-            };
+            });
 
-            await transporter.sendMail(mailOptions);
+            if (mailError) throw mailError;
             console.log(`[OTP] Sent to ${email}`);
             
             res.json({ message: 'OTP sent successfully' });
