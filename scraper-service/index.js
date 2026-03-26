@@ -288,7 +288,12 @@ async function startWorker() {
     const app = express();
     const port = process.env.PORT || 3001;
 
-    app.use(cors());
+    // Enhanced CORS to handle browser requests from Vercel
+    app.use(cors({
+        origin: '*', // Allow all for now, or use ['https://doomboard.vercel.app']
+        methods: ['GET', 'POST', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
+    }));
     app.use(express.json());
 
     // --- AUTH OTP ENDPOINTS ---
@@ -337,7 +342,15 @@ async function startWorker() {
             res.json({ message: 'OTP sent successfully' });
         } catch (err) {
             console.error('[OTP Error]', err);
-            res.status(500).json({ error: 'Failed to send OTP. Check SMTP settings.' });
+            // Provide more specific error message to help debugging
+            const errorMessage = err.message || 'Unknown error';
+            if (errorMessage.includes('auth_otps')) {
+                res.status(500).json({ error: `Database Error: Table 'auth_otps' might be missing. ${errorMessage}` });
+            } else if (errorMessage.includes('SMTP') || errorMessage.includes('mail')) {
+                res.status(500).json({ error: `SMTP Error: Failed to send email. ${errorMessage}` });
+            } else {
+                res.status(500).json({ error: `Auth Error: ${errorMessage}` });
+            }
         }
     });
 
