@@ -1,11 +1,30 @@
 require('dotenv').config();
-require('dotenv').config({ path: '.env.local' });
 const puppeteer = require('puppeteer');
 const express = require('express');
 const cors = require('cors');
 const { Resend } = require('resend');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { Cluster } = require('puppeteer-cluster');
+const { Queue, Worker } = require('bullmq');
+const Redis = require('ioredis');
+
+// --- SCALING CORE ---
+// 1. Redis Connection (The "engine" for our queue)
+const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
+
+// Handle Redis connection errors to prevent process crash
+connection.on('error', (err) => {
+    console.error('[Redis Error]', err.message);
+});
+
+// 2. The Queue (The "waiting room" for jobs)
+const scrapeQueue = new Queue('scrape-jobs', { connection });
+
+// 3. The Browser Pool (The "worker team")
+let cluster;
+let scrapeWorker;
 
 // Initialize Resend (HTTP API instead of SMTP to bypass Render block)
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -16,92 +35,163 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Mailer Setup - DEPRECATED: Switched to Resend HTTP API
+/**
+ * Scaling Concept: The Cluster Pool
+ * Instead of "launching a fresh browser" for every job (Slow + High RAM), 
+ * we use a pool of browsers that stay open and wait for tasks.
+ */
+async function initCluster() {
+    cluster = await Cluster.launch({
+        concurrency: Cluster.CONCURRENCY_PAGE, // Use one browser with multiple tabs
+        maxConcurrency: 3, // Only 3 jobs at a time (Perfect for Render's 512MB RAM)
+        puppeteerOptions: {
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+            headless: "new"
+        }
+    });
 
-const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
-];
+    console.log('✅ Puppeteer Cluster Initialized (Max 3 parallel jobs)');
 
-// Launch a fresh browser for each task to prevent memory leaks and zombie hangs
-async function launchFreshBrowser() {
-    return await puppeteer.launch({
-        headless: "new",
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-        ]
+    // Handle cluster errors
+    cluster.on('taskerror', (err, data) => {
+        console.error(`[Cluster Error] ${data}: ${err.message}`);
     });
 }
 
 /**
- * Improved Core Scraping Logic
+ * Scaling Concept: The Worker (Consumer)
+ * This is the "brain" that pulls jobs from the queue and gives them to the cluster.
  */
-async function scrapeUrlWithRetry(url, retries = 2) {
-    let lastError;
-    for (let i = 0; i < retries; i++) {
-        let page;
-        let browser;
-        try {
-            console.log(`[Attempt ${i + 1}] Scraping: ${url}`);
-            browser = await launchFreshBrowser();
-            page = await browser.newPage();
+function initWorker() {
+    scrapeWorker = new Worker('scrape-jobs', async (job) => {
+        const { jobId } = job.data;
+        console.log(`[Queue] Processing job: ${jobId}`);
+        
+        // Fetch the latest job data from Supabase
+        const { data: jobData, error } = await supabase
+            .from('jobs')
+            .select('*')
+            .eq('id', jobId)
+            .single();
 
-            await page.setRequestInterception(true);
-            page.on('request', (req) => {
-                const type = req.resourceType();
-                if (['image', 'font', 'media', 'stylesheet'].includes(type)) {
-                    req.abort();
-                } else {
-                    req.continue();
-                }
-            });
-
-            await page.setUserAgent(USER_AGENTS[i % USER_AGENTS.length]);
-
-            await page.goto(url, {
-                waitUntil: 'domcontentloaded',
-                timeout: 30000
-            });
-
-            await new Promise(r => setTimeout(r, 5000));
-
-            const data = await page.evaluate(() => {
-                const texts = [];
-                const walk = (el) => {
-                    if (!el) return;
-                    if (['SCRIPT', 'STYLE', 'IFRAME', 'NOSCRIPT', 'SVG', 'NAV', 'FOOTER'].includes(el.tagName)) return;
-                    if (el.nodeType === Node.TEXT_NODE) {
-                        const val = el.textContent.trim();
-                        if (val && val.length > 5) texts.push(val);
-                    } else {
-                        el.childNodes.forEach(walk);
-                    }
-                };
-                walk(document.body);
-                return {
-                    title: document.title,
-                    content: texts.join(' ')
-                };
-            });
-
-            if (!data.content || data.content.length < 500) {
-                throw new Error("Page content too short or empty.");
-            }
-
-            return data;
-        } catch (err) {
-            console.warn(`[Attempt ${i + 1}] Failed: ${err.message}`);
-            lastError = err;
-        } finally {
-            if (page) await page.close().catch(() => { });
-            if (browser) await browser.close().catch(() => { });
-            if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, 3000));
+        if (error || !jobData) {
+            console.error(`[Queue] Job ${jobId} not found or error:`, error?.message);
+            return;
         }
+
+        // Use the cluster to execute the scrape
+        await cluster.execute(jobData.normalized_url, async ({ page, data: url }) => {
+            await handleJobWithPage(page, jobData);
+        });
+    }, { connection, concurrency: 3 });
+
+    scrapeWorker.on('completed', (job) => {
+        console.log(`[Queue] Job ${job.id} (JobId: ${job.data.jobId}) completed successfully`);
+    });
+
+    scrapeWorker.on('failed', (job, err) => {
+        console.error(`[Queue] Job ${job?.id} failed: ${err.message}`);
+    });
+}
+
+/**
+ * Optimized Scraping Logic using a pre-allocated page
+ */
+async function handleJobWithPage(page, job) {
+    try {
+        // 1. Atomic Lock: Ensure only one worker processes this job
+        const { data: lockedJob, error: lockError } = await supabase
+            .from('jobs')
+            .update({ status: 'processing' })
+            .eq('id', job.id)
+            .eq('status', 'collected') // Only claim if it's still 'collected'
+            .select()
+            .single();
+
+        if (lockError || !lockedJob) {
+            console.log(`[${job.id}] Job already claimed by another worker or not found.`);
+            return;
+        }
+
+        // 2. Cluster Safety Guard
+        if (!cluster) {
+            throw new Error('Puppeteer Cluster not initialized');
+        }
+
+        // 3. Scrape
+        await page.setRequestInterception(true);
+        const onReq = (req) => {
+            if (['image', 'font', 'media'].includes(req.resourceType())) req.abort();
+            else req.continue();
+        };
+        page.on('request', onReq);
+
+        await page.goto(job.normalized_url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await new Promise(r => setTimeout(r, 2000));
+
+        const scraped = await page.evaluate(() => {
+            const texts = [];
+            document.querySelectorAll('script, style, nav, footer').forEach(el => el.remove());
+            const walk = (el) => {
+                if (el.nodeType === Node.TEXT_NODE) {
+                    const val = el.textContent.trim();
+                    if (val.length > 5) texts.push(val);
+                } else el.childNodes.forEach(walk);
+            };
+            walk(document.body);
+            return { title: document.title, content: texts.join(' ') };
+        });
+
+        page.off('request', onReq); // Cleanup listener for this page
+
+        // 3. AI Refine
+        const refined = await refineWithAI(scraped, job.normalized_url);
+
+        // 4. Update Supabase
+        await supabase.from('jobs').update({
+            title: refined.title,
+            company: refined.company,
+            description: refined.description,
+            skills: refined.skills || [],
+            location: refined.location,
+            salary: refined.salary,
+            status: 'finalized'
+        }).eq('id', job.id);
+
+        console.log(`✅ [${job.id}] Finalized: ${refined.title}`);
+
+    } catch (err) {
+        console.error(`❌ [${job.id}] Failed:`, err.message);
+        await supabase.from('jobs').update({ status: 'error', description: err.message }).eq('id', job.id);
     }
-    throw lastError;
+}
+
+/**
+ * Self-Healing: Cleanup jobs that got stuck in 'processing'
+ */
+async function handleStaleJobs() {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    
+    // Scaling Fix: Use 'created_at' (updated_at missing from schema)
+    const { data: staleJobs, error } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('status', 'processing')
+        .lt('created_at', tenMinutesAgo);
+
+    if (error) {
+        console.error('[Stale] Database error:', error.message);
+        return;
+    }
+
+    if (!staleJobs || staleJobs.length === 0) return;
+
+    console.log(`[Stale] Resetting ${staleJobs.length} jobs that timed out...`);
+    for (const job of staleJobs) {
+        await supabase.from('jobs')
+            .update({ status: 'error', description: 'Worker Timeout' })
+            .eq('id', job.id);
+    }
 }
 
 /**
@@ -158,117 +248,37 @@ Text: ${scrapedData.content.slice(0, 15000)}
 /**
  * Main Job Processor
  */
-async function handleJobRecord(job) {
-    if (['processing', 'finalized', 'error'].includes(job.status)) return;
-
-    console.log(`\n--- [${new Date().toISOString()}] New Job Detected: ${job.id} ---`);
-    console.log(`URL: ${job.normalized_url}`);
-
-    try {
-        const { data: lockData, error: lockError } = await supabase
-            .from('jobs')
-            .update({ status: 'processing' })
-            .eq('id', job.id)
-            .eq('status', 'collected')
-            .select();
-
-        if (lockError) throw lockError;
-        if (!lockData || lockData.length === 0) return;
-
-        // 2-minute safety timeout for the entire processing block
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Job processing timed out (2m)')), 120000)
-        );
-
-        await Promise.race([
-            (async () => {
-                console.log('Step 1: Scraping...');
-                const scraped = await scrapeUrlWithRetry(job.normalized_url);
-
-                console.log('Step 2: AI Refining (Skills Extraction)...');
-                console.log(`Sending ${scraped.content.length} characters to AI...`);
-                const refined = await refineWithAI(scraped, job.normalized_url);
-                console.log('AI Response Received:', JSON.stringify(refined).slice(0, 100) + '...');
-
-                console.log('Step 3: Updating Record...');
-                const { error } = await supabase.from('jobs').update({
-                    title: refined.title,
-                    company: refined.company,
-                    description: refined.description,
-                    skills: refined.skills || [],
-                    location: refined.location,
-                    salary: refined.salary,
-                    work_type: refined.workType,
-                    posted_at: refined.postedAt,
-                    status: 'finalized'
-                }).eq('id', job.id);
-
-                if (error) throw error;
-                console.log(`✅ [${job.id}] Success: ${refined.title} at ${refined.company}`);
-            })(),
-            timeoutPromise
-        ]);
-
-    } catch (err) {
-        console.error(`❌ [${job.id}] Failed:`, err.message);
-        // Explicitly update to error state on failure
-        const { error: updateError } = await supabase.from('jobs').update({
-            status: 'error',
-            description: `Scraper Error: ${err.message}`
-        }).eq('id', job.id);
-
-        if (updateError) console.error('Failed to update error status:', updateError.message);
-    }
-}
-
-async function handleStaleJobs() {
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-
-    // Find jobs stuck in 'processing' for too long
-    // Note: We'd need an 'updated_at' column to do this perfectly, 
-    // but we can fallback to 'created_at' if we just started.
-    // Let's assume there's no updated_at yet, so we just check for processing jobs.
-    // For now, let's just log them and maybe reset them.
-    const { data: staleJobs, error } = await supabase
-        .from('jobs')
-        .select('id, title, status, created_at')
-        .eq('status', 'processing')
-        .lt('created_at', fiveMinutesAgo);
-
-    if (error) return;
-
-    if (staleJobs && staleJobs.length > 0) {
-        console.log(`[Stale] Found ${staleJobs.length} stale jobs. Resetting...`);
-        for (const job of staleJobs) {
-            await supabase.from('jobs')
-                .update({ status: 'error', description: 'Scraper timeout/hang detected.' })
-                .eq('id', job.id);
-        }
-    }
-}
-
+/**
+ * Scaling Concept: The Producer
+ * Instead of doing work, this function just adds the task to the queue "waiting room".
+ */
 async function scanForPendingJobs() {
     const { data: pendingJobs, error } = await supabase
         .from('jobs')
-        .select('*')
+        .select('id')
         .eq('status', 'collected')
         .eq('is_deleted', false);
 
     if (error) {
-        console.error('Scan Error:', error.message);
+        console.error('[Producer] Database error:', error.message);
         return;
     }
 
     if (pendingJobs && pendingJobs.length > 0) {
-        console.log(`[Scan] Found ${pendingJobs.length} pending jobs.`);
+        console.log(`[Producer] Found ${pendingJobs.length} jobs. Adding to queue...`);
         for (const job of pendingJobs) {
-            await handleJobRecord(job);
-            // Add a small 10s delay between jobs to respect API quotas
-            await new Promise(r => setTimeout(r, 10000));
+            await scrapeQueue.add('scrape', { jobId: job.id }, { 
+                jobId: job.id, // Prevent duplicate jobs in queue
+                removeOnComplete: true,
+                attempts: 3,
+                backoff: {
+                    type: 'exponential',
+                    delay: 1000,
+                }
+            });
         }
     }
-
-    // Also check for stale ones periodically
+    
     await handleStaleJobs();
 }
 
@@ -300,7 +310,7 @@ async function startWorker() {
 
             // Save to DB (hashed for security)
             const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
-            
+
             const { error: dbError } = await supabase
                 .from('auth_otps')
                 .insert([{ email, otp_hash: otpHash, expires_at: expiresAt.toISOString() }]);
@@ -326,7 +336,7 @@ async function startWorker() {
 
             if (mailError) throw mailError;
             console.log(`[OTP] Sent to ${email}`);
-            
+
             res.json({ message: 'OTP sent successfully' });
         } catch (err) {
             console.error('[OTP Error]', err);
@@ -378,7 +388,7 @@ async function startWorker() {
 
             // Return tokens directly if they are available in authData.properties
             // Most Supabase versions return hashed_token, etc.
-            res.json({ 
+            res.json({
                 message: 'OTP verified',
                 session_url: authData.properties.action_link,
                 tokens: {
@@ -399,40 +409,53 @@ async function startWorker() {
 
     console.log('--- DOOMBOARD Scraper Worker Starting ---');
     console.log(`Monitoring Supabase: ${process.env.SUPABASE_URL}`);
-    console.log('Mode: Hybrid (Realtime + 30s Polling Fallback)');
+    console.log('Mode: Hybrid (Realtime + 60s Polling Fallback)');
 
+    // Boot everything
+    await initCluster();
+    initWorker();
     await scanForPendingJobs();
 
     const channel = supabase.channel('db-changes');
-
     channel
         .on('postgres_changes',
             { event: '*', schema: 'public', table: 'jobs' },
-            (payload) => {
+            async (payload) => {
                 if (payload.new && payload.new.status === 'collected') {
-                    console.log(`[Realtime] Triggered for job: ${payload.new.id}`);
-                    handleJobRecord(payload.new);
+                    console.log(`[Producer] Realtime trigger for job: ${payload.new.id}`);
+                    await scrapeQueue.add('scrape', { jobId: payload.new.id }, {
+                        jobId: payload.new.id,
+                        removeOnComplete: true,
+                        attempts: 3,
+                        backoff: {
+                            type: 'exponential',
+                            delay: 1000,
+                        }
+                    });
                 }
             }
         )
-        .subscribe((status) => {
-            console.log(`Realtime Status: ${status}`);
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                console.warn('Realtime connection unstable. Relying on Polling fallback...');
-            }
-        });
+        .subscribe();
 
     setInterval(async () => {
         await scanForPendingJobs();
-    }, 30000);
+    }, 60000); // Poll once a minute as a safety net
 }
 
 startWorker().catch(err => {
-    console.error('CRITICAL WORKER ERROR:', err.message);
+    console.error('CRITICAL BOOT ERROR:', err.message);
     process.exit(1);
 });
 
-process.on('SIGINT', () => {
-    console.log('\nWorker shutting down...');
-    process.exit();
+process.on('SIGINT', async () => {
+    console.log('\nWorker shutting down gracefully...');
+    try {
+        if (scrapeWorker) await scrapeWorker.close();
+        if (cluster) await cluster.close();
+        console.log('✅ Shutdown complete.');
+    } catch (err) {
+        console.error('❌ Error during shutdown:', err.message);
+    } finally {
+        process.exit(0);
+    }
 });
